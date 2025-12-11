@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="一款功能完整的中国象棋游戏，支持回合制对战、将军判定、胜负条件检测和游戏存档功能">
+  <meta name="keywords" content="中国象棋,chess,game,HTML5,Canvas,TypeScript">
+  <title>中国象棋 - Chinese Chess</title>
+  <style>
+    /* CSS变量定义 */
+    :root {
+      /* 主题色彩 */
+      --primary-color: #8b4513; /* 主色调 - 棕色 */
+      --secondary-color: #d2b48c; /* 辅助色 - 棕黄色 */
+      --accent-color: #4caf50; /* 强调色 - 绿色 */
+      --danger-color: #f44336; /* 危险色 - 红色 */
+      --warning-color: #ff9800; /* 警告色 - 橙色 */
+      
+      /* 棋盘色彩 */
+      --board-bg: #d2b48c; /* 棋盘背景 */
+      --board-line: #8b4513; /* 棋盘线条 */
+      --river-bg: #f5deb3; /* 楚河汉界背景 */
+      --river-text: #8b4513; /* 楚河汉界文字 */
+      
+      /* 棋子色彩 */
+      --red-piece-bg: #ffffff; /* 红方棋子背景 */
+      --red-piece-border: #ff0000; /* 红方棋子边框 */
+      --red-piece-text: #ff0000; /* 红方棋子文字 */
+      --black-piece-bg: #ffffff; /* 黑方棋子背景 */
+      --black-piece-border: #000000; /* 黑方棋子边框 */
+      --black-piece-text: #000000; /* 黑方棋子文字 */
+      
+      /* 界面色彩 */
+      --bg-color: #f8f3e9; /* 页面背景 */
+      --card-bg: #ffffff; /* 卡片背景 */
+      --text-primary: #333333; /* 主要文字 */
+      --text-secondary: #666666; /* 次要文字 */
+      
+      /* 边框和阴影 */
+      --border-radius: 8px; /* 圆角 */
+      --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* 阴影 */
+      --box-shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.15); /* 悬停阴影 */
+      
+      /* 动画 */
+      --transition-fast: 0.2s ease; /* 快速过渡 */
+      --transition-normal: 0.3s ease; /* 正常过渡 */
+      --transition-slow: 0.5s ease; /* 慢速过渡 */
+      
+      /* 字体 */
+      --font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+    }
+    
+    /* 重置样式 */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    /* 基础样式 */
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    
+    /* 标题样式 */
+    h1 {
+      color: var(--primary-color);
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+      letter-spacing: 2px;
+    }
+    
+    /* 主容器 */
+    .app-container {
+      width: 100%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    /* 游戏容器 */
+    .game-container {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: var(--card-bg);
+      padding: 2rem;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      transition: box-shadow var(--transition-normal);
+    }
+    
+    .game-container:hover {
+      box-shadow: var(--box-shadow-hover);
+    }
+    
+    /* 棋盘样式 */
+    canvas {
+      border: 3px solid var(--primary-color);
+      background-color: var(--board-bg);
+      border-radius: var(--border-radius);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      transition: transform var(--transition-normal);
+    }
+    
+    canvas:hover {
+      transform: scale(1.01);
+    }
+    
+    /* 游戏信息区域 */
+    .game-info {
+      margin-top: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 800px;
+    }
+    
+    /* 游戏控制区域 */
+    .game-controls-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    /* 回合指示器 */
+    .turn-indicator {
+      font-size: 1.25rem;
+      font-weight: 700;
+      padding: 0.75rem 1.5rem;
+      border-radius: var(--border-radius);
+      background: linear-gradient(135deg, var(--card-bg), #f0f0f0);
+      box-shadow: var(--box-shadow);
+      transition: all var(--transition-normal);
+      min-width: 150px;
+      text-align: center;
+    }
+    
+    .turn-indicator.turn-red {
+      color: var(--danger-color);
+      border-left: 4px solid var(--danger-color);
+    }
+    
+    .turn-indicator.turn-black {
+      color: var(--text-primary);
+      border-left: 4px solid var(--text-primary);
+    }
+    
+    /* 按钮组 */
+    .game-controls {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    /* 按钮样式 */
+    button {
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--border-radius);
+      background: linear-gradient(135deg, var(--accent-color), #45a049);
+      color: white;
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      box-shadow: var(--box-shadow);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    button:hover {
+      background: linear-gradient(135deg, #45a049, #3d8b40);
+      box-shadow: var(--box-shadow-hover);
+      transform: translateY(-2px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    button:disabled {
+      background: linear-gradient(135deg, #bdbdbd, #9e9e9e);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    /* 状态消息 */
+    .status-message {
+      margin-top: 1rem;
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: var(--danger-color);
+      text-align: center;
+      padding: 0.75rem;
+      background-color: rgba(244, 67, 54, 0.1);
+      border-radius: var(--border-radius);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+      transition: all var(--transition-normal);
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    
+    .status-message.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    /* 响应式设计 */
+    @media (max-width: 900px) {
+      .game-container {
+        padding: 1rem;
+      }
+      
+      canvas {
+        max-width: 100%;
+        height: auto;
+      }
+      
+      .game-controls-section {
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+      
+      .game-controls {
+        justify-content: center;
+      }
+      
+      h1 {
+        font-size: 2rem;
+      }
+    }
+    
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+      
+      .game-container {
+        padding: 0.75rem;
+      }
+      
+      h1 {
+        font-size: 1.75rem;
+        margin-bottom: 1.5rem;
+      }
+      
+      button {
+        padding: 0.625rem 1.25rem;
+        font-size: 0.875rem;
+      }
+      
+      .turn-indicator {
+        font-size: 1rem;
+        padding: 0.625rem 1.25rem;
+      }
+    }
+    
+    /* 动画效果 */
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .fade-in {
+      animation: fadeIn 0.5s ease-out forwards;
+    }
+    
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+    
+    .pulse {
+      animation: pulse 0.6s ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <h1 class="fade-in">中国象棋</h1>
+    <div class="game-container fade-in">
+      <canvas id="chessboard"></canvas>
+      <div class="game-info">
+        <!-- 模式选择区域 -->
+        <div class="mode-selector-section" style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, var(--card-bg), #f0f0f0); border-radius: var(--border-radius); box-shadow: var(--box-shadow);">
+          <h3 style="margin-bottom: 1rem; color: var(--primary-color); font-size: 1.125rem; text-align: center;">游戏模式</h3>
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;">
+            <!-- 模式选择 -->
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="radio" id="modePvP" name="gameMode" value="pvp" checked>
+              <label for="modePvP" style="cursor: pointer; font-weight: 600;">玩家 vs 玩家</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="radio" id="modePvE" name="gameMode" value="pve">
+              <label for="modePvE" style="cursor: pointer; font-weight: 600;">玩家 vs 电脑</label>
+            </div>
+          </div>
+          
+          <!-- AI设置，初始隐藏 -->
+          <div id="aiSettings" style="margin-top: 1rem; display: none;">
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; align-items: center;">
+              <!-- AI难度选择 -->
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label for="aiDifficulty" style="font-weight: 600;">AI难度：</label>
+                <select id="aiDifficulty" style="padding: 0.5rem; border: 1px solid #ccc; border-radius: var(--border-radius); font-size: 1rem;">
+                  <option value="easy">简单</option>
+                  <option value="medium" selected>中等</option>
+                  <option value="hard">困难</option>
+                </select>
+              </div>
+              
+              <!-- AI玩家颜色选择 -->
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <label for="aiPlayerColor" style="font-weight: 600;">AI执：</label>
+                <select id="aiPlayerColor" style="padding: 0.5rem; border: 1px solid #ccc; border-radius: var(--border-radius); font-size: 1rem;">
+                  <option value="red">红方</option>
+                  <option value="black" selected>黑方</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 游戏控制区域 -->
+        <div class="game-controls-section">
+          <div class="turn-indicator" id="turnIndicator">红方回合</div>
+          <div class="game-controls">
+            <button id="newGameBtn" title="开始新游戏">新游戏</button>
+            <button id="saveGameBtn" title="保存当前游戏">保存</button>
+            <button id="loadGameBtn" title="加载已保存的游戏">加载</button>
+            <button id="undoBtn" title="悔棋">悔棋</button>
+          </div>
+        </div>
+        <div class="status-message" id="statusMessage"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

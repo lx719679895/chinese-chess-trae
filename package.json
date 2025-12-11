@@ -1,0 +1,19 @@
+{
+  "name": "chinese-chess",
+  "version": "1.0.0",
+  "description": "中国象棋游戏 - HTML5 Canvas + TypeScript",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["chinese-chess", "canvas", "typescript", "game"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  }
+}
