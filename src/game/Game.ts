@@ -324,10 +324,27 @@ export class Game {
       return false;
     }
 
-    // 从历史记录中恢复上一个状态
-    const previousState = this.gameModel.history.pop()!;
-    this.gameModel = previousState;
-
+    // 在PVE模式下，需要撤回两步：电脑落子 + 玩家上一步落子
+    let undoCount = this.gameModel.gameMode === GameMode.PVE ? 2 : 1;
+    
+    // 确保不超过历史记录的长度
+    undoCount = Math.min(undoCount, this.gameModel.history.length);
+    
+    // 获取需要恢复的目标状态（从历史记录中倒数第undoCount个状态）
+    const targetState = this.gameModel.history[this.gameModel.history.length - undoCount];
+    
+    // 从历史记录中移除相应数量的状态
+    this.gameModel.history.splice(this.gameModel.history.length - undoCount);
+    
+    // 将目标状态的属性复制到当前gameModel，保留当前的history数组
+    this.gameModel.pieces = targetState.pieces.map(piece => piece.clone());
+    this.gameModel.currentTurn = targetState.currentTurn;
+    this.gameModel.gameState = targetState.gameState;
+    this.gameModel.winner = targetState.winner;
+    this.gameModel.isInCheck = targetState.isInCheck;
+    this.gameModel.selectedPieceId = targetState.selectedPieceId;
+    this.gameModel.validMoves = [...targetState.validMoves];
+    
     // 清除任何正在进行的动画
     this.animation.clear();
     

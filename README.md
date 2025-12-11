@@ -5,6 +5,8 @@
 
 本游戏基于 HTML5 Canvas 和 TypeScript 开发，提供了流畅的游戏体验和丰富的功能，适合所有喜爱中国象棋的玩家。
 
+[🎮 在线体验](https://chinese-chess-trae.netlify.app/)
+
 ## ✨ 功能特点
 
 ### 核心游戏功能
