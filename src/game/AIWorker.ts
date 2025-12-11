@@ -1,24 +1,20 @@
-import { PieceColor, AIDifficulty, AI_CONFIG, PieceType } from '../utils/Constants';
+import { PieceColor, AIDifficulty, PieceType } from '../utils/Constants';
 import { GameModel } from '../models/GameModel';
 import { PieceModel } from '../models/PieceModel';
 import { Position } from '../models/Position';
 import { Rules } from './Rules';
 
-/**
- * AI决策类，实现不同难度的AI对手
- */
-export class AI {
-  // Web Worker实例，用于在后台执行AI算法
-  private static worker: Worker | null = null;
 
-  /**
-   * 执行AI决策，返回最佳移动
-   * @param gameModel 当前游戏状态
-   * @returns 最佳移动的棋子和目标位置，或null表示无合法移动
-   */
-  static async makeMove(gameModel: GameModel): Promise<{ piece: PieceModel; target: Position } | null> {
+
+// AIWorker类，用于在Web Worker中执行AI算法
+class AIWorker {
+  // 执行AI决策
+  static async makeMove(gameModelData: any, aiColor: PieceColor, difficulty: AIDifficulty): Promise<{ piece: any; target: { x: number; y: number } } | null> {
+    // 从JSON数据中恢复GameModel
+    const gameModel = GameModel.fromJSON(gameModelData);
+    
     // 检查是否是AI回合
-    if (gameModel.currentTurn !== gameModel.aiPlayerColor) {
+    if (gameModel.currentTurn !== aiColor) {
       return null;
     }
 
@@ -31,7 +27,7 @@ export class AI {
     // 根据难度等级选择最佳移动
     let bestMove: { piece: PieceModel; target: Position } | null = null;
     
-    switch (gameModel.aiDifficulty) {
+    switch (difficulty) {
       case AIDifficulty.EASY:
         bestMove = this.chooseRandomMove(validMoves);
         break;
@@ -39,28 +35,27 @@ export class AI {
         bestMove = this.chooseMediumMove(validMoves, gameModel);
         break;
       case AIDifficulty.HARD:
-        // 在Web Worker中执行困难难度的AI算法
-        bestMove = await this.chooseHardMoveWithWorker(gameModel);
+        bestMove = this.chooseHardMove(validMoves, gameModel, aiColor);
         break;
     }
 
-    // 模拟思考时间，增强游戏体验
-    await this.sleep(AI_CONFIG.THINK_TIME[gameModel.aiDifficulty]);
-    
-    return bestMove;
+    if (bestMove) {
+      return {
+        piece: bestMove.piece,
+        target: bestMove.target
+      };
+    }
+
+    return null;
   }
 
-  /**
-   * 获取AI回合的所有合法移动
-   * @param gameModel 当前游戏状态
-   * @returns 所有合法移动的数组
-   */
+  // 获取AI回合的所有合法移动
   private static getAllValidMoves(gameModel: GameModel): { piece: PieceModel; target: Position }[] {
     const validMoves: { piece: PieceModel; target: Position }[] = [];
     
     // 获取AI玩家的所有棋子
     const aiPieces = gameModel.pieces.filter(piece => 
-      piece.isAlive && piece.color === gameModel.aiPlayerColor
+      piece.isAlive && piece.color === gameModel.currentTurn
     );
     
     // 遍历每个棋子，获取所有合法移动
@@ -74,95 +69,13 @@ export class AI {
     return validMoves;
   }
 
-  /**
-   * 使用Web Worker执行困难难度的AI算法
-   * @param gameModel 当前游戏状态
-   * @returns 最佳移动
-   */
-  private static async chooseHardMoveWithWorker(gameModel: GameModel): Promise<{ piece: PieceModel; target: Position } | null> {
-    return new Promise((resolve) => {
-      // 创建或获取Web Worker实例
-      if (!this.worker) {
-        try {
-          // 注意：在Vite环境中，需要使用特殊的方式导入Web Worker
-          // @ts-ignore
-          this.worker = new Worker(new URL('./AIWorker.ts', import.meta.url), { type: 'module' });
-        } catch (error) {
-          console.error('Failed to create AI worker:', error);
-          // 降级处理：在主线程中执行AI算法
-          const validMoves = this.getAllValidMoves(gameModel);
-          resolve(this.chooseHardMove(validMoves, gameModel));
-          return;
-        }
-      }
-
-      // 监听来自Web Worker的消息
-      const handleMessage = (event: MessageEvent) => {
-        const { type, bestMove, error } = event.data;
-        
-        if (type === 'moveResult') {
-          if (bestMove) {
-            // 从Web Worker返回的结果中找到对应的棋子
-            const piece = gameModel.pieces.find(p => p.id === bestMove.piece.id);
-            if (piece) {
-              resolve({ piece, target: new Position(bestMove.target.x, bestMove.target.y) });
-            } else {
-              resolve(null);
-            }
-          } else {
-            resolve(null);
-          }
-        } else if (type === 'error') {
-          console.error('AI Worker error:', error);
-          // 降级处理：在主线程中执行AI算法
-          const validMoves = this.getAllValidMoves(gameModel);
-          resolve(this.chooseHardMove(validMoves, gameModel));
-        }
-        
-        // 移除事件监听器
-        this.worker?.removeEventListener('message', handleMessage);
-      };
-
-      this.worker.addEventListener('message', handleMessage);
-
-      // 发送消息给Web Worker
-      try {
-        // 将游戏状态转换为JSON格式
-        const gameModelData = gameModel.toJSON();
-        
-        this.worker.postMessage({
-          type: 'makeMove',
-          gameModel: gameModelData,
-          aiColor: gameModel.aiPlayerColor,
-          difficulty: gameModel.aiDifficulty
-        });
-      } catch (error) {
-        console.error('Failed to send message to AI worker:', error);
-        // 移除事件监听器
-        this.worker.removeEventListener('message', handleMessage);
-        // 降级处理：在主线程中执行AI算法
-        const validMoves = this.getAllValidMoves(gameModel);
-        resolve(this.chooseHardMove(validMoves, gameModel));
-      }
-    });
-  }
-
-  /**
-   * 简单难度：随机选择合法移动
-   * @param validMoves 所有合法移动
-   * @returns 随机选择的移动
-   */
+  // 简单难度：随机选择合法移动
   private static chooseRandomMove(validMoves: { piece: PieceModel; target: Position }[]): { piece: PieceModel; target: Position } {
     const randomIndex = Math.floor(Math.random() * validMoves.length);
     return validMoves[randomIndex];
   }
 
-  /**
-   * 中等难度：考虑吃子和将军情况
-   * @param validMoves 所有合法移动
-   * @param gameModel 当前游戏状态
-   * @returns 最佳移动
-   */
+  // 中等难度：考虑吃子和将军情况
   private static chooseMediumMove(validMoves: { piece: PieceModel; target: Position }[], gameModel: GameModel): { piece: PieceModel; target: Position } {
     // 优先选择能将军的移动
     const checkMoves = validMoves.filter(move => this.wouldBeCheck(move, gameModel));
@@ -183,25 +96,15 @@ export class AI {
     return this.chooseRandomMove(validMoves);
   }
 
-  /**
-   * 困难难度：使用Minimax算法、Alpha-Beta剪枝和迭代加深搜索
-   * @param validMoves 所有合法移动
-   * @param gameModel 当前游戏状态
-   * @returns 最佳移动
-   */
-  private static chooseHardMove(validMoves: { piece: PieceModel; target: Position }[], gameModel: GameModel): { piece: PieceModel; target: Position } {
+  // 困难难度：使用Minimax算法和Alpha-Beta剪枝
+  private static chooseHardMove(validMoves: { piece: PieceModel; target: Position }[], gameModel: GameModel, aiColor: PieceColor): { piece: PieceModel; target: Position } {
     // 使用迭代加深搜索
-    const { bestMove } = this.iterativeDeepening(gameModel, validMoves);
+    const { bestMove } = this.iterativeDeepening(gameModel, validMoves, aiColor);
     return bestMove;
   }
 
-  /**
-   * 实现迭代加深搜索
-   * @param gameModel 当前游戏状态
-   * @param validMoves 所有合法移动
-   * @returns 最佳移动和得分
-   */
-  private static iterativeDeepening(gameModel: GameModel, validMoves: { piece: PieceModel; target: Position }[]): { bestMove: { piece: PieceModel; target: Position }; bestScore: number } {
+  // 实现迭代加深搜索
+  private static iterativeDeepening(gameModel: GameModel, validMoves: { piece: PieceModel; target: Position }[], aiColor: PieceColor): { bestMove: { piece: PieceModel; target: Position }; bestScore: number } {
     const maxDepth = 6; // 最大搜索深度
     const timeLimit = 1500; // 时间限制（毫秒）
     const startTime = Date.now();
@@ -246,7 +149,7 @@ export class AI {
         gameCopy.switchTurn();
         
         // 使用Minimax算法和Alpha-Beta剪枝评估移动
-        const score = this.minimax(gameCopy, depth - 1, -Infinity, Infinity, false, gameModel.aiPlayerColor);
+        const score = this.minimax(gameCopy, depth - 1, -Infinity, Infinity, false, aiColor);
         
         scoredMove.score = score;
       });
@@ -265,11 +168,7 @@ export class AI {
     return { bestMove, bestScore: bestMove.score };
   }
 
-  /**
-   * 选择移动时加入随机性，避免可预测性
-   * @param scoredMoves 带有得分的移动列表
-   * @returns 选择的移动和得分
-   */
+  // 选择移动时加入随机性，避免可预测性
   private static selectMoveWithRandomness(scoredMoves: { move: { piece: PieceModel; target: Position }; score: number }[]): { piece: PieceModel; target: Position; score: number } {
     // 按得分降序排序
     scoredMoves.sort((a, b) => b.score - a.score);
@@ -297,16 +196,7 @@ export class AI {
     };
   }
 
-  /**
-   * 实现Minimax算法和Alpha-Beta剪枝
-   * @param gameModel 当前游戏状态
-   * @param depth 搜索深度
-   * @param alpha Alpha值
-   * @param beta Beta值
-   * @param isMaximizingPlayer 是否是最大化玩家
-   * @param aiColor AI的颜色
-   * @returns 最佳得分
-   */
+  // 实现Minimax算法和Alpha-Beta剪枝
   private static minimax(gameModel: GameModel, depth: number, alpha: number, beta: number, isMaximizingPlayer: boolean, aiColor: PieceColor): number {
     // 获取当前玩家的所有合法移动
     const validMoves = this.getAllValidMovesForCurrentPlayer(gameModel);
@@ -377,12 +267,7 @@ export class AI {
     }
   }
 
-  /**
-   * 评估当前位置的得分
-   * @param gameModel 当前游戏状态
-   * @param aiColor AI的颜色
-   * @returns 位置的得分
-   */
+  // 评估当前位置的得分
   private static evaluatePosition(gameModel: GameModel, aiColor: PieceColor): number {
     let score = 0;
     const opponentColor = aiColor === PieceColor.RED ? PieceColor.BLACK : PieceColor.RED;
@@ -431,11 +316,23 @@ export class AI {
     return score;
   }
 
-  /**
-   * 获取棋子的位置价值
-   * @param piece 棋子
-   * @returns 位置价值
-   */
+  // 获取棋子的价值
+  private static getPieceValue(piece: PieceModel): number {
+    // 简单的棋子价值评估
+    const values: Record<string, number> = {
+      [PieceType.KING]: 1000,    // 将/帅
+      [PieceType.ADVISOR]: 100,  // 士/仕
+      [PieceType.ELEPHANT]: 150, // 象/相
+      [PieceType.HORSE]: 300,    // 马/傌
+      [PieceType.CHARIOT]: 500,  // 车/俥
+      [PieceType.CANNON]: 250,   // 炮/砲
+      [PieceType.SOLDIER]: 50    // 兵/卒
+    };
+    
+    return values[piece.type] || 0;
+  }
+
+  // 获取棋子的位置价值
   private static getPositionValue(piece: PieceModel): number {
     // 位置价值表，根据棋子类型和位置给予不同权重
     const positionValues: Record<string, number[][]> = {
@@ -532,12 +429,7 @@ export class AI {
     return 0;
   }
 
-  /**
-   * 获取棋子的安全性价值
-   * @param piece 棋子
-   * @param gameModel 当前游戏状态
-   * @returns 安全性价值
-   */
+  // 获取棋子的安全性价值
   private static getSafetyValue(piece: PieceModel, gameModel: GameModel): number {
     // 评估棋子被攻击的风险
     let safetyValue = 0;
@@ -566,12 +458,7 @@ export class AI {
     return safetyValue;
   }
 
-  /**
-   * 评估控制区域
-   * @param gameModel 当前游戏状态
-   * @param color 玩家颜色
-   * @returns 控制区域得分
-   */
+  // 评估控制区域
   private static evaluateControlArea(gameModel: GameModel, color: PieceColor): number {
     let controlScore = 0;
     const pieces = gameModel.getPiecesByColor(color);
@@ -592,12 +479,7 @@ export class AI {
     return controlScore;
   }
 
-  /**
-   * 评估王的安全性
-   * @param gameModel 当前游戏状态
-   * @param color 玩家颜色
-   * @returns 王的安全性得分
-   */
+  // 评估王的安全性
   private static evaluateKingSafety(gameModel: GameModel, color: PieceColor): number {
     let safetyScore = 0;
     
@@ -645,12 +527,7 @@ export class AI {
     return safetyScore;
   }
 
-  /**
-   * 对移动进行排序，优先搜索更可能是最佳的移动
-   * @param moves 移动列表
-   * @param gameModel 当前游戏状态
-   * @returns 排序后的移动列表
-   */
+  // 对移动进行排序，优先搜索更可能是最佳的移动
   private static sortMoves(moves: { piece: PieceModel; target: Position }[], gameModel: GameModel): { piece: PieceModel; target: Position }[] {
     return moves.sort((a, b) => {
       // 优先搜索吃子移动
@@ -674,11 +551,7 @@ export class AI {
     });
   }
 
-  /**
-   * 执行移动
-   * @param move 移动
-   * @param gameModel 游戏状态
-   */
+  // 执行移动
   private static executeMove(move: { piece: PieceModel; target: Position }, gameModel: GameModel): void {
     // 找到对应棋子
     const piece = gameModel.pieces.find(p => p.id === move.piece.id);
@@ -697,11 +570,7 @@ export class AI {
     piece.moveTo(move.target);
   }
 
-  /**
-   * 获取当前玩家的所有合法移动
-   * @param gameModel 当前游戏状态
-   * @returns 所有合法移动
-   */
+  // 获取当前玩家的所有合法移动
   private static getAllValidMovesForCurrentPlayer(gameModel: GameModel): { piece: PieceModel; target: Position }[] {
     const validMoves: { piece: PieceModel; target: Position }[] = [];
     
@@ -721,32 +590,7 @@ export class AI {
     return validMoves;
   }
 
-  /**
-   * 获取棋子的价值
-   * @param piece 棋子
-   * @returns 棋子的价值
-   */
-  private static getPieceValue(piece: PieceModel): number {
-    // 简单的棋子价值评估
-    const values: Record<string, number> = {
-      king: 1000,    // 将/帅
-      advisor: 100,  // 士/仕
-      elephant: 150, // 象/相
-      horse: 300,    // 马/傌
-      chariot: 500,  // 车/俥
-      cannon: 250,   // 炮/砲
-      soldier: 50    // 兵/卒
-    };
-    
-    return values[piece.type] || 0;
-  }
-
-  /**
-   * 检查移动后是否会将军
-   * @param move 要检查的移动
-   * @param gameModel 当前游戏状态
-   * @returns 是否会将军
-   */
+  // 检查移动后是否会将军
   private static wouldBeCheck(move: { piece: PieceModel; target: Position }, gameModel: GameModel): boolean {
     // 创建游戏模型副本
     const gameCopy = gameModel.clone();
@@ -768,12 +612,36 @@ export class AI {
     const opponentColor = gameCopy.currentTurn === PieceColor.RED ? PieceColor.BLACK : PieceColor.RED;
     return Rules.isInCheck(opponentColor, gameCopy);
   }
-
-  /**
-   * 模拟延迟，增强游戏体验
-   * @param ms 延迟时间（毫秒）
-   */
-  private static sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 }
+
+// 监听来自主线程的消息
+self.addEventListener('message', async (event: MessageEvent) => {
+  // 使用类型断言指定data属性的类型
+  const data = event.data as {
+    type: string;
+    gameModel: any;
+    aiColor: PieceColor;
+    difficulty: AIDifficulty;
+  };
+  
+  const { type, gameModel, aiColor, difficulty } = data;
+  
+  if (type === 'makeMove') {
+    try {
+      // 执行AI决策
+      const bestMove = await AIWorker.makeMove(gameModel, aiColor, difficulty);
+      
+      // 将结果发送回主线程
+      self.postMessage({
+        type: 'moveResult',
+        bestMove: bestMove
+      });
+    } catch (error) {
+      // 发送错误信息回主线程
+      self.postMessage({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+});

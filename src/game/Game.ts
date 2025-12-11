@@ -6,7 +6,6 @@ import { GameModel } from '../models/GameModel';
 import { PieceModel } from '../models/PieceModel';
 import { Position } from '../models/Position';
 import { Rules } from './Rules';
-import { SaveLoad } from './SaveLoad';
 import { AI } from './AI';
 
 export class Game {
@@ -47,18 +46,6 @@ export class Game {
     const newGameBtn = document.getElementById('newGameBtn');
     if (newGameBtn) {
       newGameBtn.addEventListener('click', () => this.newGame());
-    }
-
-    // 保存游戏按钮
-    const saveGameBtn = document.getElementById('saveGameBtn');
-    if (saveGameBtn) {
-      saveGameBtn.addEventListener('click', () => this.saveGame());
-    }
-
-    // 加载游戏按钮
-    const loadGameBtn = document.getElementById('loadGameBtn');
-    if (loadGameBtn) {
-      loadGameBtn.addEventListener('click', () => this.loadGame());
     }
 
     // 悔棋按钮
@@ -417,26 +404,6 @@ export class Game {
   public setAIPlayerColor(color: PieceColor): void {
     this.gameModel.aiPlayerColor = color;
     this.newGame(); // 重置游戏状态
-  }
-
-  // 保存游戏
-  saveGame(): void {
-    SaveLoad.saveWithDate(this.gameModel);
-    this.updateStatus('游戏已保存');
-  }
-
-  // 加载游戏
-  loadGame(): void {
-    const loadedGame = SaveLoad.load(this.gameModel);
-    if (loadedGame) {
-      this.gameModel = loadedGame;
-      this.animation.clear();
-      this.updateTurnIndicator();
-      this.updateStatus('游戏已加载');
-      this.render();
-    } else {
-      this.updateStatus('没有找到保存的游戏');
-    }
   }
 
   // 开始渲染循环

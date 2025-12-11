@@ -91,7 +91,7 @@ export class GameModel {
     return cloned;
   }
 
-  // 转换为JSON对象（用于存档）
+  // 转换为JSON对象（用于序列化）
   toJSON(): any {
     return {
       pieces: this.pieces.map(piece => piece.toJSON()),

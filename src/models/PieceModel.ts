@@ -36,7 +36,7 @@ export class PieceModel {
     );
   }
 
-  // 转换为JSON对象（用于存档）
+  // 转换为JSON对象（用于序列化）
   toJSON(): any {
     return {
       id: this.id,
